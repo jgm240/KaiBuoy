@@ -25,6 +25,20 @@ gdeploy install buoy-certified
 
 Installing a certified app needs a phone that allows it over the debugger. If gdeploy refuses, use `buoy`. See each folder's README for details, permissions, keys and limits.
 
+## Updating
+
+With the phone connected over USB (USB debugging on) and gdeploy installed, one command downloads the latest version from this repo and installs it:
+
+```
+node tools/update-phone.js              # Buoy C (certified), the default
+node tools/update-phone.js --build privileged
+node tools/update-phone.js --dry-run    # download and check, change nothing
+```
+
+Other options: `--release` (latest GitHub release instead of `main`), `--ref <branch-or-tag>`, `--from <folder>` (a local copy), `--force` (reinstall the same version), `--start` (launch afterwards). It installs under a fixed app id (`buoy-c` or `buoy`) so it is an update in place rather than a new random-id copy like `gdeploy install` makes. Whether an in-place update keeps the app's saved chats and settings on the phone is not verified yet.
+
+In the app, Settings, Check for updates compares the installed version with the latest on GitHub and shows this command when there is a newer one. The app cannot install the update itself: KaiOS refuses to import an app that is already installed, and an app cannot uninstall itself and then install its replacement.
+
 ## Status
 
 Tested in a desktop browser (demo mode) and on a Nokia 8110 4G running KaiOS 2.5.1 (texts and calls with the certified build). Other phones and KaiOS versions are untested.

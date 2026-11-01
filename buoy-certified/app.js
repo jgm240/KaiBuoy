@@ -882,14 +882,14 @@ const PERMS = [
 function permState(p) { return DEMO ? 'Not available in demo' : p.state ? p.state() : p.has() ? 'Allowed' : 'Not granted'; }
 function askPerm(p) { try { p.ask(); } catch (e) {} }
 
-function infoView(title, lines) {
+function infoView(title, lines, noRestart) {
   const v = {
-    title: title, sk: () => ['', '', 'Restart'],
+    title: title, sk: () => ['', '', noRestart ? '' : 'Restart'],
     draw(b) { v.n = el('div', 'note'); lines.forEach(l => v.n.appendChild(el('p', null, l))); b.appendChild(v.n); },
     key(k) {
       if (k === 'ArrowDown') { v.n.scrollTop += 40; return true; }
       if (k === 'ArrowUp') { v.n.scrollTop -= 40; return true; }
-      if (k === 'SoftRight') { location.reload(); return true; }
+      if (k === 'SoftRight' && !noRestart) { location.reload(); return true; }
       return false;
     }
   };
@@ -927,6 +927,45 @@ function permissionsView() {
   return v;
 }
 
+/* ================= updates ================= */
+// The phone can't safely install an app over itself, so this only checks GitHub and says what to run.
+const UPDATE_REPO = 'jgm240/KaiBuoy';
+function getJson(url, system) {
+  return new Promise((resolve, reject) => {
+    let x;
+    try { x = system ? new XMLHttpRequest({ mozSystem: true, mozAnon: true }) : new XMLHttpRequest(); } catch (e) { x = new XMLHttpRequest(); }
+    x.open('GET', url);
+    x.timeout = 15000;
+    x.onload = () => { try { resolve(JSON.parse(x.responseText)); } catch (e) { reject(new Error('Unreadable reply')); } };
+    x.onerror = () => reject(new Error('No connection'));
+    x.ontimeout = () => reject(new Error('Timed out'));
+    x.send();
+  });
+}
+function versionNewer(a, b) {
+  const x = String(a).replace(/^v/, '').split('.'), y = String(b).replace(/^v/, '').split('.');
+  for (let i = 0; i < 3; i++) { const p = parseInt(x[i], 10) || 0, q = parseInt(y[i], 10) || 0; if (p !== q) return p > q; }
+  return false;
+}
+function checkForUpdates() {
+  toast('Checking GitHub…');
+  getJson('manifest.webapp', false).then(own => {
+    const dir = own.type === 'certified' ? 'buoy-certified' : 'buoy';
+    return getJson('https://raw.githubusercontent.com/' + UPDATE_REPO + '/main/' + dir + '/manifest.webapp', true).then(latest => ({ own: own, latest: latest, dir: dir }));
+  }).then(r => {
+    if (!versionNewer(r.latest.version, r.own.version)) {
+      go(infoView('Up to date', ['You have ' + r.own.name + ' ' + r.own.version + ', the latest version on GitHub.'], true));
+    } else {
+      go(infoView('Update available', [
+        'Installed: ' + r.own.version + '. Latest on GitHub: ' + r.latest.version + '.',
+        'Connect the phone to your computer with USB debugging on, then run in the Buoy folder:',
+        'node tools/update-phone.js' + (r.own.type === 'certified' ? '' : ' --build privileged'),
+        'It downloads the latest version from GitHub and installs it over this one.'
+      ], true));
+    }
+  }).catch(err => toast('Could not check: ' + err.message));
+}
+
 function settingsView() {
   const cyc = (len, cur, d) => (cur + d + len) % len;
   const v = makeList({
@@ -938,6 +977,7 @@ function settingsView() {
       { title: 'Chat wallpaper', sub: WALLPAPERS[prefs.wp], k: 'wp' },
       { title: 'SIM select', sub: simLabel(), k: 'sim' },
       { title: 'Reset appearance', sub: 'Light, teal, normal size', k: 'reset' },
+      { title: 'Check for updates', sub: 'Compare with the latest on GitHub', k: 'update' },
       { title: 'Request permissions', sub: 'Check and ask for SMS, contacts, calls', k: 'perms' },
       { title: 'Reset app data', sub: 'Clear chats, groups, calls, reminders', k: 'wipe' }
     ],
@@ -945,6 +985,7 @@ function settingsView() {
     act: (k, it) => {
       const d = k === 'ArrowLeft' ? -1 : (k === 'ArrowRight' || k === 'Enter') ? 1 : 0;
       if (!d || !it) return false;
+      if (it.k === 'update') { if (k === 'Enter') checkForUpdates(); return k === 'Enter'; }
       if (it.k === 'perms') { if (k === 'Enter') go(permissionsView()); return k === 'Enter'; }
       if (it.k === 'wipe') {
         if (k === 'Enter') go(menuView('Clear all app data?', [

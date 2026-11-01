@@ -2,7 +2,7 @@
   "name": "Buoy C",
   "description": "Messenger and dialer: SMS chats, group chats, broadcast lists, calls, reminders, emoji, themes and contacts",
   "launch_path": "/index.html",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "type": "certified",
   "developer": {
     "name": "Buoy"
@@ -31,6 +31,9 @@
     },
     "mobileconnection": {
       "description": "See which SIM slot has a card"
+    },
+    "systemXHR": {
+      "description": "Check GitHub for new versions"
     }
   }
 }
