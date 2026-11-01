@@ -39,7 +39,7 @@ node tools/update-phone.js --build privileged
 node tools/update-phone.js --dry-run    # download and check, change nothing
 ```
 
-Other options: `--release` (latest GitHub release instead of `main`), `--ref <branch-or-tag>`, `--from <folder>` (a local copy), `--force` (reinstall the same version), `--start` (launch afterwards). It installs under a fixed app id (`buoy-c` or `buoy`) so it is an update in place rather than a new random-id copy like `gdeploy install` makes. Whether an in-place update keeps the app's saved chats and settings on the phone is not verified yet.
+Other options: `--release` (latest GitHub release instead of `main`), `--ref <branch-or-tag>`, `--from <folder>` (a local copy), `--force` (reinstall the same version), `--start` (launch afterwards). It installs under a fixed app id (`buoy-c` or `buoy`) so it is an update in place rather than a new random-id copy like `gdeploy install` makes. An in-place update keeps the app's saved chats, calls and settings: checked on a Nokia 8110 4G (KaiOS 2.5.1) by updating Buoy C from 0.4.0 to 0.5.0 and comparing its saved data before and after.
 
 In the app, Settings, Check for updates compares the installed version with the latest on GitHub and shows this command when there is a newer one. The app cannot install the update itself: KaiOS refuses to import an app that is already installed, and an app cannot uninstall itself and then install its replacement.
 
