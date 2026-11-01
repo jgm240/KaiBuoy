@@ -6,6 +6,10 @@ Chats, group chats, broadcast lists, reply quoting, emoji shortcodes, group call
 
 <p align="center"><img src="design/buoy-preview.png" width="160" alt="Buoy logo"></p>
 
+## Look
+
+The layout follows the phone's own Messages app: a dark themed header, gray section headers (Pinned, Today, Yesterday, and A to Z for contacts), tall two-line rows with a solid accent for the focused row, option menus that pop up over the dimmed screen, and the stock text sizes. The accent palette (Blue, Cyan, Lime, Orange, Pink, Purple, Red) uses the same colors KaiOS offers. Everything is written from scratch; no code, icons or images from the KaiOS apps are included.
+
 ## Two builds
 
 | Folder | Type | What it can do |

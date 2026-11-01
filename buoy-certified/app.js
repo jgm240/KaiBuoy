@@ -49,12 +49,13 @@ function markRead(conv) { reads[conv] = Date.now(); DB.set('reads', reads); }
 
 /* ================= theme ================= */
 const ACCENTS = [
-  { n: 'Teal', h: 174, s: 80 }, { n: 'Green', h: 140, s: 60 }, { n: 'Blue', h: 210, s: 75 }, { n: 'Purple', h: 270, s: 50 },
-  { n: 'Pink', h: 330, s: 65 }, { n: 'Orange', h: 26, s: 85 }, { n: 'Red', h: 4, s: 70 }
+  { n: 'Blue', hl: '#00caf2', hd: '#20407b' }, { n: 'Cyan', hl: '#1cc1c4', hd: '#045463' }, { n: 'Lime', hl: '#82c51b', hd: '#2a400c' },
+  { n: 'Orange', hl: '#ff9500', hd: '#381e0d' }, { n: 'Pink', hl: '#f6529b', hd: '#48132c' }, { n: 'Purple', hl: '#873eff', hd: '#320374' },
+  { n: 'Red', hl: '#f3203d', hd: '#5b0700' }
 ];
 const THEMES = ['light', 'dark', 'auto'];
 const THEME_LABEL = { light: 'Light', dark: 'Dark', auto: 'Auto (dark 7pm to 7am)' };
-const SIZES = ['Normal', 'Large', 'Extra large'], SIZE_PX = ['14px', '16px', '18px'];
+const SIZES = ['Normal', 'Large', 'Extra large'], SIZE_PX = [[17, 14, 12], [22, 18, 16], [26, 21, 19]];   // primary, secondary, small text
 const WALLPAPERS = ['Default', 'Tint', 'Dots', 'Plain'];
 
 function isDark() {
@@ -63,25 +64,28 @@ function isDark() {
   const h = new Date().getHours();
   return h >= 19 || h < 7;
 }
-function accentColor(i) { const a = ACCENTS[i] || ACCENTS[0]; return 'hsl(' + a.h + ',' + a.s + '%,42%)'; }
+function accentColor(i) { return (ACCENTS[i] || ACCENTS[0]).hl; }
+function hexRgb(hex) { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
 function applyTheme() {
-  const a = ACCENTS[prefs.accent] || ACCENTS[0], d = isDark(), h = a.h, s = a.s;
-  const hsl = (l, sat) => 'hsl(' + h + ',' + (sat == null ? s : sat) + '%,' + l + '%)';
+  const a = ACCENTS[prefs.accent] || ACCENTS[0], d = isDark(), c = hexRgb(a.hl);
+  const light = (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255 > 0.6;   // dark text on bright accents
   const v = {
-    '--hdr': hsl(d ? 18 : 26), '--acc': hsl(d ? 50 : 46, Math.min(s + 10, 90)),
-    '--bg': d ? '#111b21' : '#ffffff', '--fg': d ? '#e9edef' : '#111111', '--muted': d ? '#8696a0' : '#667781',
-    '--line': d ? '#222d34' : '#eeeeee', '--focus': d ? hsl(22, 40) : hsl(94, 60),
-    '--bar': d ? '#1f2c34' : '#f2f2f2', '--barfg': d ? hsl(68, 60) : hsl(26), '--sc': d ? '#ffffff' : '#000000',
-    '--out': d ? hsl(22, 45) : hsl(88, 55), '--in': d ? '#202c33' : '#ffffff', '--input': d ? '#2a3942' : '#ffffff'
+    '--hdr': a.hd, '--acc': a.hl, '--focus': a.hl, '--focusfg': light ? '#000000' : '#ffffff',
+    '--bg': d ? '#121212' : '#ffffff', '--fg': d ? '#e8e8e8' : '#333333', '--muted': d ? '#9a9a9a' : '#6a6a6a',
+    '--line': d ? '#2a2a2a' : '#e7e7e7', '--sub': d ? '#222222' : '#e6e6e6', '--subfg': d ? '#a0a0a0' : '#6a6a6a',
+    '--bar': d ? '#1c1c1c' : '#ffffff', '--barfg': d ? '#dddddd' : '#333333', '--sc': d ? '#ffffff' : '#000000',
+    '--out': a.hd, '--outfg': '#ffffff', '--in': d ? '#2a2a2a' : '#e6e6e6', '--infg': d ? '#e8e8e8' : '#333333',
+    '--input': d ? '#2a2a2a' : '#ffffff', '--menubg': d ? '#1e1e1e' : '#ffffff', '--menuhd': d ? '#333333' : '#cccccc', '--menuhdfg': d ? '#eeeeee' : '#323232'
   };
-  let chat = d ? '#0b141a' : '#ece5dd', img = 'none', size = 'auto';
-  if (prefs.wp === 1) chat = d ? hsl(10, 30) : hsl(93, 45);
-  else if (prefs.wp === 2) { img = 'radial-gradient(rgba(128,128,128,.22) 1.5px, transparent 1.5px)'; size = '14px 14px'; }
-  else if (prefs.wp === 3) chat = d ? '#000000' : '#ffffff';
+  let chat = d ? '#121212' : '#ffffff', img = 'none', size = 'auto';
+  if (prefs.wp === 1) chat = 'rgba(' + c.join(',') + ',' + (d ? '.14' : '.12') + ')';
+  else if (prefs.wp === 2) { img = 'radial-gradient(rgba(128,128,128,.25) 1.5px, transparent 1.5px)'; size = '14px 14px'; }
+  else if (prefs.wp === 3) chat = d ? '#000000' : '#f2f2f2';
   v['--chat'] = chat; v['--wpimg'] = img; v['--wpsize'] = size;
+  const sz = SIZE_PX[prefs.size] || SIZE_PX[0];
+  v['--pri'] = sz[0] + 'px'; v['--sec'] = sz[1] + 'px'; v['--thi'] = sz[2] + 'px';
   const root = document.documentElement;
   Object.keys(v).forEach(k => root.style.setProperty(k, v[k]));
-  root.style.fontSize = SIZE_PX[prefs.size] || '14px';
 }
 
 /* ================= platform: contacts ================= */
@@ -365,6 +369,12 @@ function announce(rec) {
   toast(nameFor(rec.from || rec.num) + ': ' + snippet(splitQuote(rec.text).body, 40));
 }
 
+function dayGroup(t) {
+  const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(new Date()) - day(new Date(t))) / 86400000);
+  return diff <= 0 ? 'Today' : diff === 1 ? 'Yesterday' : diff < 7 ? 'This week' : 'Older';
+}
+
 function convs() {
   const map = {};
   msgs.forEach(x => {
@@ -430,8 +440,16 @@ function setKeys(v) {
   document.getElementById('sc').textContent = s[1];
   document.getElementById('sr').textContent = s[2];
 }
+const OVERLAY = document.getElementById('overlay');
 function render() {
   const v = cur;
+  if (v.overlay) {          // pop-up: keep the screen underneath, only the soft keys change
+    setKeys(v);
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    OVERLAY.style.display = 'block'; OVERLAY.innerHTML = ''; v.draw(OVERLAY); v.built = true;
+    return;
+  }
+  OVERLAY.style.display = 'none'; OVERLAY.innerHTML = '';
   document.getElementById('hdr').textContent = typeof v.title === 'function' ? v.title() : v.title;
   setKeys(v);
   if (v.built && v.update) v.update();
@@ -449,7 +467,10 @@ function scrollTo(box, node) {
 }
 
 function rowsFor(wrap, items) {
+  let lastGroup = null;
   return items.map(it => {
+    if (it.group && it.group !== lastGroup) wrap.appendChild(el('div', 'subhdr', it.group));
+    lastGroup = it.group || null;
     const r = el('div', 'row');
     if (it.check != null) r.appendChild(el('span', 'chk', it.check ? '☑' : '☐'));
     if (it.swatch) { const s = el('div', 'av'); s.style.background = it.swatch; r.appendChild(s); }
@@ -478,11 +499,18 @@ function t9jump(v, d) {
 // Generic list: o.items(v) -> [{title, sub, time, badge, av, check}], o.act(key, item, v) -> handled?
 function makeList(o) {
   const v = {
-    i: 0, tab: 0, title: o.title,
+    i: 0, tab: 0, title: o.title, overlay: !!o.overlay,
     sk: () => o.sk ? o.sk(v) : ['', 'Select', ''],
     draw(b) {
+      v.host = b;
       if (o.head) b.appendChild(o.head(v));
-      v.wrap = el('div', 'list'); b.appendChild(v.wrap);
+      v.wrap = el('div', 'list');
+      if (o.overlay) {      // a pop-up menu over the dimmed screen
+        const panel = el('div', 'menu');
+        panel.appendChild(el('div', 'mh', typeof o.title === 'function' ? o.title() : o.title));
+        panel.appendChild(v.wrap);
+        b.appendChild(el('div', 'dim')); b.appendChild(panel);
+      } else b.appendChild(v.wrap);
       const items = v.items = o.items(v);
       if (v.i >= items.length) v.i = Math.max(0, items.length - 1);
       v.rows = rowsFor(v.wrap, items);
@@ -495,7 +523,7 @@ function makeList(o) {
     },
     redraw() {
       const s = v.wrap ? v.wrap.scrollTop : 0;
-      BODY.innerHTML = ''; v.draw(BODY); v.wrap.scrollTop = s; v.focus();
+      v.host.innerHTML = ''; v.draw(v.host); v.wrap.scrollTop = s; v.focus();
       setKeys(v);
     },
     key(k) {
@@ -511,7 +539,7 @@ function makeList(o) {
 
 function menuView(title, opts) {
   return makeList({
-    title: title,
+    title: title, overlay: true,
     items: () => opts.map(o => ({ title: o.t, sub: o.sub, fn: o.fn })),
     act: (k, it) => { if (k === 'Enter' && it) { it.fn(); return true; } return false; }
   });
@@ -1029,18 +1057,18 @@ function mainView() {
           let sub = info.group && info.group.bc ? 'Broadcast list' : 'No messages yet';
           if (l) sub = (l.dir === 'out' ? 'You: ' : info.group && l.from ? nameFor(l.from).split(' ')[0] + ': ' : '') + snippet(splitQuote(l.text).body, 60);
           sub = (prefs.pinned[c.id] ? '📌 ' : '') + (prefs.muted[c.id] ? '🔇 ' : '') + sub;
-          return { title: (info.group && info.group.bc ? '📢 ' : '') + info.title, sub: sub, time: l ? fmtTime(l.t) : '', badge: c.unread, muted: !!prefs.muted[c.id], av: info.title, conv: c.id };
+          return { title: (info.group && info.group.bc ? '📢 ' : '') + info.title, sub: sub, time: l ? fmtTime(l.t) : '', badge: c.unread, muted: !!prefs.muted[c.id], av: info.title, conv: c.id, group: prefs.pinned[c.id] ? 'Pinned' : (l ? dayGroup(l.t) : 'Today') };
         });
       }
       if (s.tab === 1) {
-        const due = dueReminders().map(r => ({ title: reminderTitle(r), sub: '⏰ Call back', time: fmtTime(r.t), av: reminderTitle(r), rem: r }));
+        const due = dueReminders().map(r => ({ title: reminderTitle(r), sub: '⏰ Call back', time: fmtTime(r.t), av: reminderTitle(r), rem: r, group: 'Call back' }));
         const log = calls.slice().reverse().map(c => {
           const title = c.label || nameFor(c.nums[0]) + (c.nums.length > 1 ? ' +' + (c.nums.length - 1) : '');
-          return { title: title, sub: c.type === 'missed' ? '↙ Missed call' : '↗ ' + (c.nums.length > 1 ? 'Group call' : 'Outgoing'), time: fmtTime(c.t), av: title, call: c };
+          return { title: title, sub: c.type === 'missed' ? '↙ Missed call' : '↗ ' + (c.nums.length > 1 ? 'Group call' : 'Outgoing'), time: fmtTime(c.t), av: title, call: c, group: dayGroup(c.t) };
         });
         return due.concat(log);
       }
-      return Contacts.list.map(c => ({ title: c.name, sub: c.tel + (speedKeyFor(c.tel) ? '  ⚡' + speedKeyFor(c.tel) : ''), av: c.name, contact: c }));
+      return Contacts.list.map(c => ({ title: c.name, sub: c.tel + (speedKeyFor(c.tel) ? '  ⚡' + speedKeyFor(c.tel) : ''), av: c.name, contact: c, group: /[A-Za-z]/.test(c.name.charAt(0)) ? c.name.charAt(0).toUpperCase() : '#' }));
     },
     empty: s => ['No chats yet. Press the left key for a new chat.', 'No calls yet. Press the left key to dial.', 'No contacts yet.'][s.tab],
     sk: s => [['New', 'Open', 'Options'], ['Dial', 'Call', 'Options'], ['New', 'Open', 'Options']][s.tab],
