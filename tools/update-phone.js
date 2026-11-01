@@ -105,7 +105,9 @@ function fetchApp(opts, build) {
 function readManifest(dir) {
   let m;
   try { m = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.webapp'), 'utf8')); } catch (e) { die('manifest.webapp is not valid JSON'); }
-  for (const f of ['index.html', 'app.js', 'style.css']) if (!fs.existsSync(path.join(dir, f))) die('The app folder is missing ' + f);
+  const needed = ['index.html', 'app.js', 'style.css'];
+  if (fs.readFileSync(path.join(dir, 'index.html'), 'utf8').indexOf('features.js') >= 0) needed.push('features.js');
+  for (const f of needed) if (!fs.existsSync(path.join(dir, f))) die('The app folder is missing ' + f);
   return m;
 }
 

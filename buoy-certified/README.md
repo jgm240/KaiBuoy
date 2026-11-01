@@ -65,6 +65,36 @@ On a desktop browser, F1 and F2 stand in for the soft keys. Without KaiOS APIs t
 
 If the phone doesn't grant `sms`, Buoy can't send texts itself. It says so when it starts. A one-to-one message opens in the built-in Messages app, ready for you to send, and shows a ↗ instead of a ✓ because Buoy can't tell whether you sent it. Group and broadcast texts are refused. The fake "Got it" replies and sample contacts only exist in a desktop browser (the title says "demo"); they never appear on a phone. If your chats contain fake messages from an older build, use Settings, Reset app data.
 
+## More features (0.6)
+
+**Messages**
+- **Delivery marks:** ✓ sent, ✓✓ delivered, ✗ failed, from the phone's delivery reports (Settings, Delivery reports). Whether you get ✓✓ depends on your carrier supporting delivery reports. Needs the `settings` permission to switch them on.
+- **SIM per chat:** Options, SIM for this chat. Overrides the app-wide SIM select.
+- **Length counter:** above the text box, shows characters and SMS count, and warns that emoji or accented letters drop a text to 70 characters per SMS.
+- **Quick replies and templates:** Options, Quick replies (or set the left key to it). Templates can hold fill-ins like `{minutes}`; `{name}`, `{time}` and `{date}` fill themselves. Edit them in Settings, Quick replies.
+- **Scheduled messages:** Options, Schedule message. Sent while Buoy is open, or when the phone's alarm wakes it. Needs SMS access (Buoy C).
+- **Starred messages:** select a message, Star. Options, Starred messages lists them. Starred messages are never deleted by Disappearing messages.
+- **Disappearing messages:** per chat, Off, 1 day or 7 days. Deletes only Buoy's copy, not the text on the phone.
+- **Pictures (MMS):** Options, Send picture. The picture is shrunk to about 300 KB, and your typed text is sent as the caption. Received pictures show in the chat; select one and choose View picture. One person at a time, not groups.
+
+**Safety**
+- **Blocked numbers:** their texts are hidden in Buoy (the phone's Messages app still shows them). Calls from them are declined, but only while Buoy is open.
+- **Auto-reply:** a message for texts and missed calls, with a schedule, once per number every 6 hours, never to names or short codes. Only works while Buoy is open.
+- **Backup and restore:** saves chats, groups and settings to a `Buoy` folder on the SD card, optionally every week. Restore replaces what is in Buoy. Back up before reinstalling.
+- **Phone shortcuts:** airplane mode and silent mode. Needs the `settings` permission.
+
+**Contacts and calls**
+- **Edit and delete contacts**, with an optional birthday. **Find duplicates** merges contacts with the same number or name.
+- **Birthdays:** Contacts, Options, Birthdays shows the next 7 days, and Buoy mentions today's when it opens.
+- **Favorites tab:** the people you chose, then the people you contact most, up to six. Press 1 to 6 to message one.
+- **Call notes:** Calls, Options, Add note.
+- **Call log:** shows incoming, missed, blocked and outgoing calls. KaiOS does not let apps read the phone's own call history, so Buoy only sees calls while it is open.
+
+**Look**
+- **Per-chat look:** Options, Chat look sets an accent and wallpaper for one chat.
+- **Soft keys:** Settings, Soft keys changes what the left and right keys do on the main screen, and the left key in a chat. If the right key is changed, press 0 for Options.
+- **Bigger bubbles:** Settings, Bigger bubbles.
+
 ## SIM select
 
 Settings, SIM select chooses which SIM slot texts and calls use: Auto, SIM 1 or SIM 2. Auto uses the first slot that has a card. Some phones report two slots with the card in only one, and a text or call that doesn't name the slot can go to the empty one. Seeing which slot has a card needs the `mobileconnection` permission. Without it, Auto leaves the choice to the phone, and you can still pick SIM 1 or SIM 2 yourself. Calls on a chosen SIM need `telephony` access; otherwise they go through the built-in dialer, which picks its own SIM.

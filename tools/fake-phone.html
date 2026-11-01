@@ -1,0 +1,62 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>fake phone</title><link rel="stylesheet" href="../buoy/style.css"></head>
+<body><div id="app"><header id="hdr"></header><div id="body"></div><footer><span id="sl"></span><span id="sc"></span><span id="sr"></span></footer><div id="overlay"></div></div><div id="toast"></div>
+<script>
+// A fake KaiOS phone for testing. Nothing here talks to a real network, SIM or contact book.
+const T = window.T = { sent: [], mms: [], dials: [], hangups: [], settings: { 'airplaneMode.enabled': false, 'audio.volume.notification': 5 }, files: {}, listeners: {}, acts: [] };
+const dayNow = new Date();
+let store = [
+  { id: 'c1', name: ['Alice Baker'], givenName: ['Alice Baker'], tel: [{ value: '+15550101' }], bday: new Date(Date.UTC(1990, dayNow.getMonth(), dayNow.getDate())) },
+  { id: 'c2', name: ['Ben Carter'], givenName: ['Ben Carter'], tel: [{ value: '+15550102' }, { value: '+15550999' }], bday: new Date(Date.UTC(1985, dayNow.getMonth(), dayNow.getDate() + 3)) },
+  { id: 'c3', name: ['Ben Carter'], givenName: ['Ben Carter'], tel: [{ value: '+15550103' }] },
+  { id: 'c4', name: ['Dan Evans'], givenName: ['Dan Evans'], tel: [{ value: '+15550104' }] }
+];
+const cursor = items => { const r = {}; let i = 0; const next = () => { r.result = items[i++] || null; r.onsuccess && r.onsuccess.call(r); }; r.continue = () => setTimeout(next, 0); setTimeout(next, 0); return r; };
+const req = fn => { const r = {}; setTimeout(() => { try { r.result = fn(); r.onsuccess && r.onsuccess.call(r); } catch (e) { r.error = e; r.onerror && r.onerror(); } }, 0); return r; };
+Object.defineProperty(navigator, 'mozContacts', { value: {
+  getAll: () => cursor(store.slice()),
+  find: o => req(() => store.filter(c => c.id === o.filterValue)),
+  save: c => req(() => { if (!store.some(x => x.id === c.id)) store.push(c); }),
+  remove: c => req(() => { store = store.filter(x => x.id !== c.id); }),
+  getCount: () => req(() => store.length)
+} });
+const devMsgs = [
+  { id: 901, type: 'sms', delivery: 'sent', deliveryStatus: 'success', receiver: '+15550101', body: 'older text from the phone', timestamp: Date.now() - 3600000 },
+  { id: 902, type: 'mms', delivery: 'received', sender: '+15550104', subject: 'holiday', timestamp: Date.now() - 1800000, attachments: [] }
+];
+const L = T.listeners;
+Object.defineProperty(navigator, 'mozMobileMessage', { value: {
+  send(n, t, p) { T.sent.push({ n: n, t: t, p: p || null }); const r = {}; setTimeout(() => { r.result = { id: 100 + T.sent.length }; r.onsuccess && r.onsuccess(); }, 10); return r; },
+  sendMMS(a, p) { T.mms.push({ a: a, p: p || null }); const r = {}; setTimeout(() => { r.result = { id: 500 }; r.onsuccess && r.onsuccess(); }, 10); return r; },
+  getMessage(id) { return req(() => ({ id: id, attachments: id === 902 ? [{ content: T.pic }] : [] })); },
+  retrieveMMS(id) { T.retrieved = id; },
+  getMessages: () => cursor(devMsgs.slice()),
+  addEventListener(ev, fn) { (L[ev] = L[ev] || []).push(fn); }
+} });
+Object.defineProperty(navigator, 'mozSettings', { value: { createLock: () => ({
+  get: name => req(() => { const o = {}; o[name] = T.settings[name]; return o; }),
+  set: o => req(() => { Object.keys(o).forEach(k => { T.settings[k] = o[k]; }); })
+}) } });
+Object.defineProperty(navigator, 'getDeviceStorage', { value: () => ({
+  addNamed: (blob, name) => req(() => { if (T.files[name]) throw new Error('exists'); T.files[name] = blob; return name; }),
+  enumerate: () => cursor(Object.keys(T.files).map(n => ({ name: n, size: T.files[n].size }))),
+  get: name => req(() => T.files[name])
+}) });
+const telL = {};
+Object.defineProperty(navigator, 'mozTelephony', { value: {
+  calls: [], conferenceGroup: {},
+  dial(n, s) { T.dials.push({ n: n, s: s === undefined ? null : s }); return Promise.resolve({}); },
+  addEventListener(ev, fn) { (telL[ev] = telL[ev] || []).push(fn); }
+} });
+T.tel = telL;
+Object.defineProperty(navigator, 'mozMobileConnections', { value: [{ iccId: null, voice: { network: null } }, { iccId: '8949', voice: { network: { shortName: 'HoT' } } }] });
+window.MozActivity = function (o) {
+  T.acts.push(o); const a = this;
+  if (o.name === 'pick') setTimeout(() => {
+    const c = document.createElement('canvas'); c.width = 1200; c.height = 900; const x = c.getContext('2d');
+    x.fillStyle = '#c33'; x.fillRect(0, 0, 1200, 900); x.fillStyle = '#fff'; x.font = '90px sans-serif'; x.fillText('Buoy test picture', 120, 450);
+    c.toBlob(b => { a.result = { blob: b }; a.onsuccess && a.onsuccess(); }, 'image/png');
+  }, 10);
+};
+window.fireMsg = (ev, message) => (L[ev] || []).forEach(f => f({ message: message }));
+</script>
+<script src="../buoy/features.js"></script><script src="../buoy/app.js"></script></body></html>

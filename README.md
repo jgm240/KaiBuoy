@@ -6,6 +6,10 @@ Chats, group chats, broadcast lists, reply quoting, emoji shortcodes, group call
 
 <p align="center"><img src="design/buoy-preview.png" width="160" alt="Buoy logo"></p>
 
+## Features
+
+See `buoy/README.md` for the full list: delivery marks, per-chat SIM, templates, scheduled and disappearing messages, starred messages, pictures (MMS), block list, auto-reply, backup and restore, contact editing, favorites, birthdays, call notes and more.
+
 ## Look
 
 The layout follows the phone's own Messages app: a dark themed header, gray section headers (Pinned, Today, Yesterday, and A to Z for contacts), tall two-line rows with a solid accent for the focused row, option menus that pop up over the dimmed screen, and the stock text sizes. The accent palette (Blue, Cyan, Lime, Orange, Pink, Purple, Red) uses the same colors KaiOS offers. Everything is written from scratch; no code, icons or images from the KaiOS apps are included.
@@ -42,6 +46,10 @@ node tools/update-phone.js --dry-run    # download and check, change nothing
 Other options: `--release` (latest GitHub release instead of `main`), `--ref <branch-or-tag>`, `--from <folder>` (a local copy), `--force` (reinstall the same version), `--start` (launch afterwards). It installs under a fixed app id (`buoy-c` or `buoy`) so it is an update in place rather than a new random-id copy like `gdeploy install` makes. An in-place update keeps the app's saved chats, calls and settings: checked on a Nokia 8110 4G (KaiOS 2.5.1) by updating Buoy C from 0.4.0 to 0.5.0 and comparing its saved data before and after.
 
 In the app, Settings, Check for updates compares the installed version with the latest on GitHub and shows this command when there is a newer one. The app cannot install the update itself: KaiOS refuses to import an app that is already installed, and an app cannot uninstall itself and then install its replacement.
+
+## Testing
+
+`tools/fake-phone.html` runs the app against a fake KaiOS phone (fake SMS, MMS, contacts, settings, SD card and calls) so features can be tried in a desktop browser without sending anything. Serve the repo root (for example `python3 -m http.server`) and open it.
 
 ## Status
 

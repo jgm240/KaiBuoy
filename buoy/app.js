@@ -38,7 +38,13 @@ let msgs = DB.get('msgs', []);       // { id, conv, num, from, dir: in|out, text
 let calls = DB.get('calls', []);     // { t, nums: [tel], label, type?: 'missed' }
 let reads = DB.get('reads', {});     // conv -> time last opened
 let reminders = DB.get('rem', []);   // { id, t, nums, label, shown }
-let prefs = Object.assign({ theme: 'light', accent: 0, size: 0, wp: 0, sim: 'auto', pinned: {}, muted: {}, speed: {}, tombs: [] }, DB.get('prefs', {}));
+let prefs = Object.assign({
+  theme: 'light', accent: 0, size: 0, wp: 0, sim: 'auto', pinned: {}, muted: {}, speed: {}, tombs: [],
+  chatSim: {}, blocked: [], blockCalls: true, templates: DEFAULT_TEMPLATES.slice(), scheduled: [], disappear: {}, favs: [],
+  chatLook: {}, bigBubbles: false, sk: { left: 'default', right: 'default', chatLeft: 'emoji' }, deliveryReports: true,
+  autoBackup: false, lastBackup: 0, prevVolume: 0,
+  autoReply: { on: false, msg: 'I can\u2019t talk right now. I\u2019ll get back to you soon.', from: '22:00', to: '07:00', texts: true, calls: true, cool: {} }
+}, DB.get('prefs', {}));
 
 const persist = () => { if (msgs.length > 2000) msgs = msgs.slice(-2000); DB.set('msgs', msgs); };
 const saveGroups = () => DB.set('groups', groups);
@@ -66,8 +72,9 @@ function isDark() {
 }
 function accentColor(i) { return (ACCENTS[i] || ACCENTS[0]).hl; }
 function hexRgb(hex) { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
-function applyTheme() {
-  const a = ACCENTS[prefs.accent] || ACCENTS[0], d = isDark(), c = hexRgb(a.hl);
+function applyTheme(over) {
+  const ai = over && over.accent != null ? over.accent : prefs.accent, wpi = over && over.wp != null ? over.wp : prefs.wp;
+  const a = ACCENTS[ai] || ACCENTS[0], d = isDark(), c = hexRgb(a.hl);
   const light = (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255 > 0.6;   // dark text on bright accents
   const v = {
     '--hdr': a.hd, '--acc': a.hl, '--focus': a.hl, '--focusfg': light ? '#000000' : '#ffffff',
@@ -78,14 +85,15 @@ function applyTheme() {
     '--input': d ? '#2a2a2a' : '#ffffff', '--menubg': d ? '#1e1e1e' : '#ffffff', '--menuhd': d ? '#333333' : '#cccccc', '--menuhdfg': d ? '#eeeeee' : '#323232'
   };
   let chat = d ? '#121212' : '#ffffff', img = 'none', size = 'auto';
-  if (prefs.wp === 1) chat = 'rgba(' + c.join(',') + ',' + (d ? '.14' : '.12') + ')';
-  else if (prefs.wp === 2) { img = 'radial-gradient(rgba(128,128,128,.25) 1.5px, transparent 1.5px)'; size = '14px 14px'; }
-  else if (prefs.wp === 3) chat = d ? '#000000' : '#f2f2f2';
+  if (wpi === 1) chat = 'rgba(' + c.join(',') + ',' + (d ? '.14' : '.12') + ')';
+  else if (wpi === 2) { img = 'radial-gradient(rgba(128,128,128,.25) 1.5px, transparent 1.5px)'; size = '14px 14px'; }
+  else if (wpi === 3) chat = d ? '#000000' : '#f2f2f2';
   v['--chat'] = chat; v['--wpimg'] = img; v['--wpsize'] = size;
   const sz = SIZE_PX[prefs.size] || SIZE_PX[0];
   v['--pri'] = sz[0] + 'px'; v['--sec'] = sz[1] + 'px'; v['--thi'] = sz[2] + 'px';
   const root = document.documentElement;
   Object.keys(v).forEach(k => root.style.setProperty(k, v[k]));
+  document.body.classList.toggle('big-bubbles', !!prefs.bigBubbles);
 }
 
 /* ================= platform: contacts ================= */
@@ -107,7 +115,7 @@ const Contacts = {
         const c = this.result;
         if (!c) return done(out);
         const name = (c.name && c.name[0]) || (c.givenName && c.givenName[0]) || '';
-        (c.tel || []).forEach(t => { if (t.value) out.push({ id: c.id, name: name || t.value, tel: t.value }); });
+        (c.tel || []).forEach((t, ti) => { if (t.value) out.push({ id: c.id, name: name || t.value, tel: t.value, ti: ti, bday: c.bday ? +new Date(c.bday) : null }); });
         this.continue();
       };
       req.onerror = () => done(out);
@@ -153,7 +161,8 @@ function simStatus() {
   }));
 }
 // Returns a slot number, or null to let the phone decide.
-function simServiceId() {
+function simServiceId(conv) {
+  if (conv && prefs.chatSim[conv] != null) return +prefs.chatSim[conv];
   if (prefs.sim !== 'auto') return +prefs.sim;
   const s = simStatus(), withCard = s ? s.filter(x => x.has) : [];
   return withCard.length ? withCard[0].i : null;
@@ -165,15 +174,29 @@ function simLabel() {
   return slot(sid);
 }
 
+function chatSimLabel(conv) {
+  if (prefs.chatSim[conv] == null) return 'Same as app: ' + simLabel();
+  const s = simStatus(), i = +prefs.chatSim[conv];
+  return 'SIM ' + (i + 1) + (s && s[i] ? (s[i].has ? (s[i].name ? ' (' + s[i].name + ')' : '') : ' (no card)') : '');
+}
+function chatSimMenu(info) {
+  const set = v => { if (v == null) delete prefs.chatSim[info.id]; else prefs.chatSim[info.id] = v; savePrefs(); back(); toast('SIM for this chat: ' + chatSimLabel(info.id)); };
+  go(menuView('SIM for this chat', [
+    { t: 'Same as app', sub: simLabel(), fn: () => set(null) },
+    { t: 'SIM 1', fn: () => set(0) },
+    { t: 'SIM 2', fn: () => set(1) }
+  ]));
+}
+
 const Sms = {
   // Resolves 'sent', or 'handoff' when the text was opened in the Messages app for the user to send.
-  send(num, text) {
+  send(num, text, onId, conv) {
     const mm = navigator.mozMobileMessage;
     if (mm) {
       return new Promise((resolve, reject) => {
-        const sid = simServiceId();
+        const sid = simServiceId(conv);
         const r = sid === null ? mm.send(num, text) : mm.send(num, text, { serviceId: sid });
-        r.onsuccess = () => resolve('sent');
+        r.onsuccess = () => { try { if (onId && r.result && r.result.id != null) onId(r.result.id); } catch (e) { /* tracking only */ } resolve('sent'); };
         r.onerror = () => reject(r.error);
       });
     }
@@ -202,7 +225,7 @@ function dialViaActivity(number) {
 // With telephony access the call is placed on the chosen SIM; otherwise the built-in dialer picks one.
 function dial(number) {
   logCall([number]);
-  const tel = navigator.mozTelephony, sid = simServiceId();
+  const tel = navigator.mozTelephony, sid = simServiceId('p:' + key(number));
   if (tel && tel.dial && sid !== null) {
     try { tel.dial(number, sid).then(null, () => { toast('Call failed on SIM ' + (sid + 1) + ', trying the dialer'); dialViaActivity(number); }); return; }
     catch (e) { /* fall through to the dialer */ }
@@ -240,19 +263,35 @@ function groupCall(nums, label) {
   next(0);
 }
 
-// Best effort: while the app is running, an incoming call that ends unanswered is logged as missed.
+// Best effort: calls are only seen while Buoy is open (the phone's own call log is not open to apps).
 function watchIncoming() {
   const tel = navigator.mozTelephony;
   if (!tel || !tel.addEventListener) return;
   tel.addEventListener('incoming', e => {
     const c = e.call, num = (c.id && c.id.number) || '';
+    if (num && prefs.blockCalls && isBlocked(num)) {
+      try { c.hangUp(); } catch (err) { /* the call may already be over */ }
+      logCall([num], '', 'blocked'); toast('Declined a call from a blocked number'); refreshView();
+      return;
+    }
     let answered = false;
-    c.addEventListener('connected', () => { answered = true; });
+    c.addEventListener('connected', () => { answered = true; if (num) { logCall([num], '', 'in'); refreshView(); } });
     c.addEventListener('disconnected', () => {
       if (answered || !num) return;
       logCall([num], '', 'missed');
       toast('Missed call: ' + nameFor(num));
+      autoReplyTo(num, 'call');
       refreshView();
+    });
+  });
+  // outgoing calls started outside Buoy (the phone's dialer, a headset key)
+  tel.addEventListener('callschanged', () => {
+    Array.prototype.forEach.call(tel.calls || [], c => {
+      if (c.__seen) return;
+      c.__seen = true;
+      if (c.state !== 'dialing' && c.state !== 'alerting') return;       // incoming calls are handled above
+      const num = (c.id && c.id.number) || '';
+      if (num && !calls.some(x => x.type !== 'in' && x.type !== 'missed' && x.nums.some(n => key(n) === key(num)) && Date.now() - x.t < 15000)) { logCall([num]); refreshView(); }
     });
   });
 }
@@ -297,6 +336,7 @@ function speedKeyFor(tel) {
   return 0;
 }
 function speedDial(d) {
+  if (d === '0') return;
   const t = prefs.speed[d];
   if (!t) { toast('Nothing on ' + d + '. Set speed dial from a contact.'); return; }
   dial(t);
@@ -354,10 +394,20 @@ function ingest(m) {
     const grp = groups.find(x => !x.bc && x.name === g[1] && (m.dir === 'out' || x.members.some(t => key(t) === key(m.num))));
     if (grp) { conv = 'g:' + grp.id; text = g[2]; if (m.dir === 'in') from = m.num; }
   }
+  if (m.dir === 'in' && isBlocked(m.num)) return false;       // hidden in Buoy; the phone still keeps the text
   if (isTombed(m, conv, text)) return false;
   // Texts we sent ourselves also come back when the phone's SMS history is read; skip those.
-  if (m.device && m.dir === 'out' && msgs.some(x => x.local && x.conv === conv && x.text === text && Math.abs(x.t - m.t) < 120000)) return false;
+  if (m.device && m.dir === 'out') {
+    const mine = msgs.find(x => x.local && x.conv === conv && x.text === text && Math.abs(x.t - m.t) < 120000);
+    if (mine) {       // the same text, read back from the phone: take its delivery state
+      if (m.devId != null && mine.devId == null) mine.devId = m.devId;
+      if (m.st && (mine.st === 'sent' || mine.st === 'sending')) mine.st = m.st;
+      return false;
+    }
+  }
   const rec = { id: m.id || uid(), conv: conv, num: m.num, from: from, dir: m.dir, text: text, t: m.t || Date.now(), st: m.st || 'sent' };
+  if (m.devId != null) rec.devId = m.devId;
+  if (m.mms) rec.mms = true;
   msgs.push(rec);
   return rec;
 }
@@ -378,6 +428,7 @@ function dayGroup(t) {
 function convs() {
   const map = {};
   msgs.forEach(x => {
+    if (convBlocked(x.conv)) return;
     const c = map[x.conv] || (map[x.conv] = { id: x.conv, last: x, unread: 0 });
     if (x.t >= c.last.t) c.last = x;
     if (x.dir === 'in' && x.t > (reads[x.conv] || 0)) c.unread++;
@@ -405,21 +456,24 @@ function recordOut(conv, num, text) {
   msgs.push(r);
   return r;
 }
-function sendText(info, text) {
+function sendText(info, text, opts) {
   if (NO_SMS && info.group) { toast('Group and broadcast texts need SMS permission'); return; }
+  const auto = !!(opts && opts.auto);
   const done = () => { persist(); refreshView(); };
   const track = (rec, job) => job.then(r => { rec.st = r === 'handoff' ? 'draft' : 'sent'; }, () => { rec.st = 'fail'; });
+  const idOf = rec => id => { rec.devId = id; };
   const main = recordOut(info.id, info.number || '', text);
+  if (auto) main.auto = true;
   let jobs;
   if (info.group && info.group.bc) {
     // Broadcast: an ordinary text to each person, which also shows in their own chat.
-    jobs = info.group.members.map(m => track(recordOut('p:' + key(m), m, text), Sms.send(m, text)));
+    jobs = info.group.members.map(m => { const r = recordOut('p:' + key(m), m, text); if (auto) r.auto = true; return track(r, Sms.send(m, text, idOf(r), info.id)); });
     Promise.all(jobs).then(() => { main.st = 'sent'; done(); });
   } else if (info.group) {
-    jobs = info.group.members.map(m => Sms.send(m, '[' + info.group.name + '] ' + text));
+    jobs = info.group.members.map(m => Sms.send(m, '[' + info.group.name + '] ' + text, null, info.id));
     track(main, Promise.all(jobs)).then(done);
   } else {
-    track(main, Sms.send(info.number, text)).then(done);
+    track(main, Sms.send(info.number, text, idOf(main), info.id)).then(done);
   }
   persist();
 }
@@ -450,6 +504,7 @@ function render() {
     return;
   }
   OVERLAY.style.display = 'none'; OVERLAY.innerHTML = '';
+  applyTheme(v.info ? prefs.chatLook[v.info.id] : null);
   document.getElementById('hdr').textContent = typeof v.title === 'function' ? v.title() : v.title;
   setKeys(v);
   if (v.built && v.update) v.update();
@@ -612,20 +667,27 @@ function chatView(info) {
   const v = {
     info: info, draft: '', sel: -1, reply: null, shown: [], nodes: [],
     title: () => info.group ? (info.group.bc ? '📢 ' : '') + info.title + ' (' + info.group.members.length + ')' : info.title,
-    sk: () => ['Emoji', v.sel >= 0 ? 'Menu' : 'Send', 'Options'],
+    sk: () => [{ emoji: 'Emoji', templates: 'Quick', schedule: 'Later' }[prefs.sk.chatLeft] || 'Emoji', v.sel >= 0 ? 'Menu' : 'Send', 'Options'],
     draw(b) {
       v.box = el('div', 'msgs');
       const c = el('div', 'compose');
       v.rb = el('div', 'replybar');
+      v.cnt = el('div', 'counter');
       v.inp = el('input'); v.inp.placeholder = 'Type a message'; v.inp.value = v.draft;
       v.inp.oninput = () => {
         const t = emojify(v.inp.value);
         if (t !== v.inp.value && v.inp.selectionStart === v.inp.value.length) { v.inp.value = t; v.inp.setSelectionRange(t.length, t.length); }
         v.draft = v.inp.value;
+        v.count();
       };
-      c.appendChild(v.rb); c.appendChild(v.inp); b.appendChild(v.box); b.appendChild(c);
+      c.appendChild(v.rb); c.appendChild(v.cnt); c.appendChild(v.inp); b.appendChild(v.box); b.appendChild(c);
       v.update();
       if (v.sel < 0) v.inp.focus(); else v.inp.blur();
+    },
+    count() {
+      const t = (v.reply ? makeQuote(v.reply) : '') + v.inp.value;
+      v.cnt.textContent = v.inp.value ? counterText(t) : '';
+      v.cnt.style.display = v.inp.value ? 'block' : 'none';
     },
     update() {
       v.rb.style.display = v.reply ? 'block' : 'none';
@@ -638,13 +700,15 @@ function chatView(info) {
           const w = el('div', 'who', nameFor(m.from)); w.style.color = 'hsl(' + hue(m.from) + ',60%,45%)'; b.appendChild(w);
         }
         if (q.q) b.appendChild(el('div', 'q', q.q));
-        b.appendChild(el('div', null, q.body));
-        b.appendChild(el('div', 'ts', fmtTime(m.t) + (m.dir === 'out' ? ' ' + ({ sending: '…', fail: '!', draft: '↗' }[m.st] || '✓') : '')));
+        if (m.mms) { const pic = el('div', 'pic', '[Picture]'); fillPicture(pic, m); b.appendChild(pic); }
+        if (q.body) b.appendChild(el('div', null, q.body));
+        b.appendChild(el('div', 'ts', fmtTime(m.t) + (m.star ? ' ⭐' : '') + (m.auto ? ' · auto' : '') + (m.dir === 'out' ? ' ' + ({ sending: '…', fail: '✗', draft: '↗', delivered: '✓✓', read: '✓✓' }[m.st] || '✓') : '')));
         v.box.appendChild(b);
         return b;
       });
       if (v.sel >= v.shown.length) v.sel = -1;
       v.box.scrollTop = v.box.scrollHeight;
+      v.count();
       v.paint();
       markRead(info.id);
     },
@@ -679,8 +743,12 @@ function chatView(info) {
         if (v.reply && !v.inp.value) { v.reply = null; v.update(); return true; }
         return false;
       }
-      if (k === 'SoftLeft') { go(emojiView(e => { v.draft += e; })); return true; }
-      if (k === 'SoftRight') { go(chatMenu(info)); return true; }
+      if (k === 'SoftLeft') {
+        const a = prefs.sk.chatLeft;
+        if (a === 'templates') templatePicker(v, info); else if (a === 'schedule') scheduleForm(info, v); else go(emojiView(e => { v.draft += e; }));
+        return true;
+      }
+      if (k === 'SoftRight') { go(chatMenu(info, v)); return true; }
       if (v.sel >= 0) v.compose();     // typing while a message is selected goes back to the text field
       return false;
     }
@@ -689,16 +757,19 @@ function chatView(info) {
 }
 
 function messageMenu(info, m, chat) {
-  const body = splitQuote(m.text).body;
-  return menuView('Message', [
-    { t: 'Reply', fn: () => { chat.reply = m; chat.sel = -1; back(); } },
-    { t: 'Copy text', fn: () => { backTo(chat); toast(copyText(body) ? 'Copied' : 'Copy not available'); } },
-    { t: 'Forward', fn: () => go(pickContacts('Forward to', true, chosen => {
+  const body = splitQuote(m.text).body, opts = [];
+  if (m.mms) opts.push({ t: 'View picture', fn: () => go(pictureView(m)) });
+  opts.push({ t: 'Reply', fn: () => { chat.reply = m; chat.sel = -1; back(); } });
+  opts.push({ t: m.star ? 'Unstar' : 'Star', fn: () => { const on = !m.star; if (on) m.star = true; else delete m.star; persist(); backTo(chat); toast(on ? 'Starred' : 'Unstarred'); } });
+  if (body) {
+    opts.push({ t: 'Copy text', fn: () => { backTo(chat); toast(copyText(body) ? 'Copied' : 'Copy not available'); } });
+    opts.push({ t: 'Forward', fn: () => go(pickContacts('Forward to', true, chosen => {
       chosen.forEach(c => sendText(convInfo('p:' + key(c.tel), c.tel), body));
       backTo(chat); toast('Forwarded to ' + chosen.length);
-    })) },
-    { t: 'Delete', sub: 'From Buoy only', fn: () => { removeMsgs([m]); chat.sel = -1; backTo(chat); toast('Deleted'); } }
-  ]);
+    })) });
+  }
+  opts.push({ t: 'Delete', sub: 'From Buoy only', fn: () => { removeMsgs([m]); chat.sel = -1; backTo(chat); toast('Deleted'); } });
+  return menuView('Message', opts);
 }
 
 function flagOpts(id, after) {
@@ -708,8 +779,41 @@ function flagOpts(id, after) {
   ];
 }
 
-function chatMenu(info) {
+function chatLookMenu(info) {
+  const look = () => prefs.chatLook[info.id] || {};
+  const set = (field, val) => {
+    const l = Object.assign({}, look());
+    if (val == null) delete l[field]; else l[field] = val;
+    if (Object.keys(l).length) prefs.chatLook[info.id] = l; else delete prefs.chatLook[info.id];
+    savePrefs(); applyTheme(prefs.chatLook[info.id]);
+  };
+  const cycle = (field, count, d) => { const cur = look()[field]; const idx = (cur == null ? -1 : cur) + d; set(field, idx < 0 ? (d < 0 ? count - 1 : null) : idx >= count ? null : idx); };
+  const v = makeList({
+    title: 'Chat look', overlay: true,
+    items: () => [
+      { title: 'Accent color', sub: look().accent == null ? 'Same as app' : ACCENTS[look().accent].n, k: 'accent' },
+      { title: 'Wallpaper', sub: look().wp == null ? 'Same as app' : WALLPAPERS[look().wp], k: 'wp' }
+    ],
+    sk: () => ['', 'Change', ''],
+    act: (k, it) => {
+      const d = k === 'ArrowLeft' ? -1 : (k === 'ArrowRight' || k === 'Enter') ? 1 : 0;
+      if (!d || !it) return false;
+      if (it.k === 'accent') cycle('accent', ACCENTS.length, d); else cycle('wp', WALLPAPERS.length, d);
+      v.redraw(); return true;
+    }
+  });
+  go(v);
+}
+
+function chatMenu(info, chat) {
   const opts = flagOpts(info.id, back);
+  opts.push({ t: 'Quick replies', fn: () => templatePicker(chat, info) });
+  opts.push({ t: 'Emoji', fn: () => go(emojiView(e => { chat.draft += e; stack.pop(); })) });
+  opts.push({ t: 'Schedule message', fn: () => scheduleForm(info, chat) });
+  if (!info.group) opts.push({ t: 'Send picture', sub: 'MMS', fn: () => sendPictureFlow(info, (chat.draft || '').trim()) });
+  opts.push({ t: 'SIM for this chat', sub: chatSimLabel(info.id), fn: () => chatSimMenu(info) });
+  opts.push({ t: 'Disappearing messages', sub: disappearLabel(info.id), fn: () => disappearMenu(info) });
+  opts.push({ t: 'Chat look', fn: () => chatLookMenu(info) });
   if (info.group && !info.group.bc) {
     opts.push({ t: 'Group call', fn: () => { back(); groupCall(info.group.members, info.group.name); } });
   }
@@ -722,6 +826,8 @@ function chatMenu(info) {
   } else {
     opts.push({ t: 'Call', sub: info.number, fn: () => { back(); dial(info.number); } });
     opts.push({ t: 'Remind me to call', fn: () => remindMenu([info.number], '') });
+    opts.push({ t: 'Call notes', fn: () => go(callNotesView([info.number], info.title)) });
+    if (info.number) opts.push({ t: 'Block number', fn: () => { blockNumber(info.number); goHome(); toast('Blocked ' + info.title); } });
     if (info.number && !Contacts.list.some(c => key(c.tel) === key(info.number))) opts.push({ t: 'Save contact', fn: () => newContact(info.number) });
   }
   opts.push({ t: 'Clear chat', fn: () => { removeMsgs(msgs.filter(m => m.conv === info.id)); back(); } });
@@ -732,7 +838,7 @@ function membersView(g) {
   return makeList({ title: g.name, items: () => g.members.map(t => ({ title: nameFor(t), sub: t, av: nameFor(t) })), sk: () => ['', '', ''] });
 }
 
-function openChat(id, hint) { go(chatView(convInfo(id, hint))); }
+function openChat(id, hint) { sweepDisappearing(); go(chatView(convInfo(id, hint))); }
 
 function pickContacts(title, multi, onDone) {
   const sel = {};
@@ -792,11 +898,17 @@ function newContact(num) {
 }
 
 function contactMenu(c) {
+  const fav = prefs.favs.some(t => key(t) === key(c.tel));
   go(menuView(c.name, [
     { t: 'Message', sub: c.tel, fn: () => { goHome(); openChat('p:' + key(c.tel), c.tel); } },
     { t: 'Call', sub: c.tel, fn: () => { back(); dial(c.tel); } },
     { t: 'Speed dial', sub: speedKeyFor(c.tel) ? 'Key ' + speedKeyFor(c.tel) : 'Hold a number key to call', fn: () => speedMenu(c) },
-    { t: 'Remind me to call', fn: () => remindMenu([c.tel], c.name) }
+    { t: fav ? 'Remove from favorites' : 'Add to favorites', fn: () => { toggleFavorite(c.tel); back(); refreshView(); } },
+    { t: 'Remind me to call', fn: () => remindMenu([c.tel], c.name) },
+    { t: 'Call notes', fn: () => go(callNotesView([c.tel], c.name)) },
+    { t: 'Edit', fn: () => editContactForm(c) },
+    { t: isBlocked(c.tel) ? 'Unblock number' : 'Block number', fn: () => { if (isBlocked(c.tel)) unblockNumber(c.tel); else blockNumber(c.tel); back(); refreshView(); } },
+    { t: 'Delete', fn: () => deleteContactMenu(c) }
   ]));
 }
 
@@ -902,6 +1014,8 @@ const PERMS = [
   { name: 'Contacts', why: 'Show and add contacts', has: () => !!navigator.mozContacts, ask: () => navigator.mozContacts && navigator.mozContacts.getCount() },
   { name: 'Calls', why: 'Group (conference) calls and missed calls', has: () => !!navigator.mozTelephony, ask: () => navigator.mozTelephony && navigator.mozTelephony.calls },
   { name: 'SIM info', why: 'See which SIM slot has a card', has: () => !!navigator.mozMobileConnections, ask: () => navigator.mozMobileConnections && navigator.mozMobileConnections.length },
+  { name: 'Phone settings', why: 'Airplane and silent shortcuts, delivery reports', has: () => !!navigator.mozSettings, ask: () => navigator.mozSettings && navigator.mozSettings.createLock() },
+  { name: 'Storage', why: 'Back up chats to the SD card', has: () => !!navigator.getDeviceStorage, ask: () => navigator.getDeviceStorage && navigator.getDeviceStorage('sdcard') },
   { name: 'Alarms', why: 'Call-back reminders when the app is closed', has: () => !!navigator.mozAlarms, ask: () => navigator.mozAlarms && navigator.mozAlarms.getAll() },
   { name: 'Notifications', why: 'Show reminders', has: () => !!window.Notification && Notification.permission === 'granted',
     ask: () => { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); },
@@ -994,45 +1108,89 @@ function checkForUpdates() {
   }).catch(err => toast('Could not check: ' + err.message));
 }
 
-function settingsView() {
-  const cyc = (len, cur, d) => (cur + d + len) % len;
+function skSettingsView() {
+  const L = ['default', 'search', 'dial', 'group', 'chat', 'starred', 'settings'], R = ['default', 'search', 'dial', 'settings', 'starred'], C = ['emoji', 'templates', 'schedule'];
+  const CN = { emoji: 'Emoji', templates: 'Quick replies', schedule: 'Schedule a message' };
+  const nm = val => SK_ACTIONS[val] ? SK_ACTIONS[val][0] : val;
   const v = makeList({
-    title: 'Settings',
+    title: 'Soft keys',
     items: () => [
-      { title: 'Theme', sub: THEME_LABEL[prefs.theme], k: 'theme' },
-      { title: 'Accent color', sub: ACCENTS[prefs.accent].n, swatch: accentColor(prefs.accent), k: 'accent' },
-      { title: 'Text size', sub: SIZES[prefs.size], k: 'size' },
-      { title: 'Chat wallpaper', sub: WALLPAPERS[prefs.wp], k: 'wp' },
-      { title: 'SIM select', sub: simLabel(), k: 'sim' },
-      { title: 'Reset appearance', sub: 'Light, teal, normal size', k: 'reset' },
-      { title: 'Check for updates', sub: 'Compare with the latest on GitHub', k: 'update' },
-      { title: 'Request permissions', sub: 'Check and ask for SMS, contacts, calls', k: 'perms' },
-      { title: 'Reset app data', sub: 'Clear chats, groups, calls, reminders', k: 'wipe' }
+      { title: 'Main screen, left key', sub: prefs.sk.left === 'default' ? 'New or Dial, by tab' : nm(prefs.sk.left), k: 'left' },
+      { title: 'Main screen, right key', sub: prefs.sk.right === 'default' ? 'Options' : nm(prefs.sk.right) + '. Press 0 for Options', k: 'right' },
+      { title: 'Chat, left key', sub: CN[prefs.sk.chatLeft], k: 'chat' }
     ],
     sk: () => ['', 'Change', ''],
     act: (k, it) => {
       const d = k === 'ArrowLeft' ? -1 : (k === 'ArrowRight' || k === 'Enter') ? 1 : 0;
       if (!d || !it) return false;
-      if (it.k === 'update') { if (k === 'Enter') checkForUpdates(); return k === 'Enter'; }
-      if (it.k === 'perms') { if (k === 'Enter') go(permissionsView()); return k === 'Enter'; }
+      const cyc = (list, cur) => list[(list.indexOf(cur) + d + list.length) % list.length];
+      if (it.k === 'left') prefs.sk.left = cyc(L, prefs.sk.left);
+      else if (it.k === 'right') prefs.sk.right = cyc(R, prefs.sk.right);
+      else prefs.sk.chatLeft = cyc(C, prefs.sk.chatLeft);
+      savePrefs(); v.redraw();
+      return true;
+    }
+  });
+  return v;
+}
+
+function settingsView() {
+  const cyc = (len, cur, d) => (cur + d + len) % len;
+  const v = makeList({
+    title: 'Settings',
+    items: () => [
+      { title: 'Theme', sub: THEME_LABEL[prefs.theme], k: 'theme', group: 'Look' },
+      { title: 'Accent color', sub: ACCENTS[prefs.accent].n, swatch: accentColor(prefs.accent), k: 'accent', group: 'Look' },
+      { title: 'Text size', sub: SIZES[prefs.size], k: 'size', group: 'Look' },
+      { title: 'Chat wallpaper', sub: WALLPAPERS[prefs.wp], k: 'wp', group: 'Look' },
+      { title: 'Bigger bubbles', sub: prefs.bigBubbles ? 'On: larger text and spacing in chats' : 'Off', k: 'bubbles', group: 'Look' },
+      { title: 'Soft keys', sub: 'Choose what the keys do', k: 'sk', group: 'Look' },
+      { title: 'Reset appearance', sub: 'Light, blue, normal size', k: 'reset', group: 'Look' },
+      { title: 'SIM select', sub: simLabel(), k: 'sim', group: 'Messages' },
+      { title: 'Delivery reports', sub: prefs.deliveryReports ? 'On: ✓✓ when a text is delivered' : 'Off', k: 'dr', group: 'Messages' },
+      { title: 'Quick replies', sub: prefs.templates.length + ' saved, with {fill-ins}', k: 'tpl', group: 'Messages' },
+      { title: 'Auto-reply', sub: prefs.autoReply.on ? 'On' : 'Off', k: 'ar', group: 'Messages' },
+      { title: 'Blocked numbers', sub: prefs.blocked.length + ' blocked', k: 'blk', group: 'Messages' },
+      { title: 'Decline blocked calls', sub: prefs.blockCalls ? 'On, while Buoy is open' : 'Off', k: 'blkcalls', group: 'Messages' },
+      { title: 'Backup and restore', sub: prefs.lastBackup ? 'Last: ' + new Date(prefs.lastBackup).toLocaleDateString() : 'Save chats to the SD card', k: 'bak', group: 'Phone' },
+      { title: 'Phone shortcuts', sub: 'Airplane mode and silent mode', k: 'short', group: 'Phone' },
+      { title: 'Request permissions', sub: 'Check and ask for SMS, contacts, calls', k: 'perms', group: 'Phone' },
+      { title: 'Check for updates', sub: 'Compare with the latest on GitHub', k: 'update', group: 'App' },
+      { title: 'Reset app data', sub: 'Clear chats, groups, calls, reminders', k: 'wipe', group: 'App' }
+    ],
+    sk: () => ['', 'Change', ''],
+    act: (k, it) => {
+      const d = k === 'ArrowLeft' ? -1 : (k === 'ArrowRight' || k === 'Enter') ? 1 : 0;
+      if (!d || !it) return false;
+      const open = fn => { if (k === 'Enter') fn(); return k === 'Enter'; };
+      if (it.k === 'update') return open(checkForUpdates);
+      if (it.k === 'perms') return open(() => go(permissionsView()));
+      if (it.k === 'sk') return open(() => go(skSettingsView()));
+      if (it.k === 'tpl') return open(() => go(templatesView()));
+      if (it.k === 'ar') return open(() => go(autoReplyView()));
+      if (it.k === 'blk') return open(() => go(blockedView()));
+      if (it.k === 'bak') return open(() => go(backupView()));
+      if (it.k === 'short') return open(() => go(phoneShortcutsView()));
       if (it.k === 'wipe') {
-        if (k === 'Enter') go(menuView('Clear all app data?', [
+        return open(() => go(menuView('Clear all app data?', [
           { t: 'Yes, clear it', sub: 'Texts on the phone are not deleted', fn: () => {
             groups = []; msgs = []; calls = []; reads = {}; reminders = [];
-            prefs.pinned = {}; prefs.muted = {}; prefs.speed = {}; prefs.tombs = [];
+            prefs.pinned = {}; prefs.muted = {}; prefs.speed = {}; prefs.tombs = []; prefs.scheduled = []; prefs.disappear = {}; prefs.chatLook = {}; prefs.chatSim = {};
             saveGroups(); persist(); saveCalls(); saveRem(); savePrefs(); DB.set('reads', {});
             goHome(); toast('Cleared');
           } },
           { t: 'No, keep it', fn: back }
-        ]));
-        return k === 'Enter';
+        ])));
       }
       if (it.k === 'theme') prefs.theme = THEMES[cyc(THEMES.length, THEMES.indexOf(prefs.theme), d)];
       else if (it.k === 'accent') prefs.accent = cyc(ACCENTS.length, prefs.accent, d);
       else if (it.k === 'size') prefs.size = cyc(SIZES.length, prefs.size, d);
       else if (it.k === 'wp') prefs.wp = cyc(WALLPAPERS.length, prefs.wp, d);
+      else if (it.k === 'bubbles') prefs.bigBubbles = !prefs.bigBubbles;
       else if (it.k === 'sim') prefs.sim = SIM_CHOICES[cyc(SIM_CHOICES.length, SIM_CHOICES.indexOf(prefs.sim), d)];
-      else { prefs.theme = 'light'; prefs.accent = 0; prefs.size = 0; prefs.wp = 0; }
+      else if (it.k === 'dr') { prefs.deliveryReports = !prefs.deliveryReports; applyDeliveryReports(); }
+      else if (it.k === 'blkcalls') prefs.blockCalls = !prefs.blockCalls;
+      else { prefs.theme = 'light'; prefs.accent = 0; prefs.size = 0; prefs.wp = 0; prefs.bigBubbles = false; }
       savePrefs(); applyTheme(); v.redraw();
       return true;
     }
@@ -1045,8 +1203,57 @@ function openNthChat(d) {
   if (list[d - 1]) openChat(list[d - 1].id); else toast('No chat in position ' + d);
 }
 
+// What each soft key can be set to do on the main screen (Settings, Soft keys).
+const SK_ACTIONS = {
+  search: ['Search', s => go(searchView(s.tab === 2 ? 'contacts' : 'chats'))],
+  dial: ['Dial', () => go(dialerView(''))],
+  group: ['New group', () => newGroup()],
+  chat: ['New chat', () => newChat()],
+  starred: ['Starred', () => go(starredView())],
+  settings: ['Settings', () => go(settingsView())]
+};
+const CALL_LABEL = { in: '↙ Incoming', missed: '↙ Missed call', blocked: '⛔ Blocked' };
+
+function favMenu(f) {
+  const manual = prefs.favs.some(t => key(t) === key(f.tel));
+  go(menuView(f.name, [
+    { t: 'Message', sub: f.tel, fn: () => { goHome(); openChat('p:' + key(f.tel), f.tel); } },
+    { t: 'Call', sub: f.tel, fn: () => { back(); dial(f.tel); } },
+    { t: manual ? 'Remove from favorites' : 'Keep in favorites', fn: () => { toggleFavorite(f.tel); back(); refreshView(); } }
+  ]));
+}
+
+function optionsMenu(s, it) {
+  const o = [];
+  if (s.tab === 0) {
+    if (it) o.push.apply(o, flagOpts(it.conv, () => { back(); s.redraw(); }));
+    o.push({ t: 'Search', fn: () => go(searchView('chats')) }, { t: 'Starred messages', fn: () => go(starredView()) }, { t: 'Scheduled messages', fn: () => go(scheduledView()) },
+      { t: 'New group', fn: newGroup }, { t: 'New broadcast list', fn: () => newList(true) }, { t: 'New chat', fn: newChat }, { t: 'Group call', fn: groupCallPicker },
+      { t: 'Blocked numbers', fn: () => go(blockedView()) });
+  } else if (s.tab === 1) {
+    if (it && it.call) {
+      o.push({ t: 'Remind me to call back', fn: () => remindMenu(it.call.nums, it.call.label) });
+      o.push({ t: it.call.note ? 'Edit note' : 'Add note', fn: () => addCallNote(it.call) });
+    }
+    if (it && it.rem) o.push({ t: 'Dismiss reminder', fn: () => { removeReminder(it.rem); back(); s.redraw(); } });
+    o.push({ t: 'Dial pad', fn: () => go(dialerView('')) }, { t: 'Group call', fn: groupCallPicker }, { t: 'Reminders', fn: () => go(remindersView()) },
+      { t: 'Clear call log', fn: () => { calls = []; saveCalls(); back(); s.redraw(); } });
+  } else if (s.tab === 2) {
+    o.push({ t: 'Search', fn: () => go(searchView('contacts')) }, { t: 'New contact', fn: () => newContact('') }, { t: 'Birthdays', fn: () => go(birthdaysView()) },
+      { t: 'Find duplicates', fn: () => go(duplicatesView()) }, { t: 'New group', fn: newGroup },
+      { t: 'Reload contacts', fn: () => Contacts.load().then(() => { back(); s.redraw(); toast('Contacts reloaded'); }) });
+  } else {
+    o.push({ t: 'Add a favorite', fn: () => go(pickContacts('Add a favorite', false, c => {
+      if (!prefs.favs.some(t => key(t) === key(c[0].tel))) { prefs.favs.push(c[0].tel); savePrefs(); }
+      goHome();
+    })) });
+  }
+  o.push({ t: 'Settings', fn: () => go(settingsView()) });
+  go(menuView('Options', o));
+}
+
 function mainView() {
-  const TABS = ['CHATS', 'CALLS', 'CONTACTS'];
+  const TABS = ['CHATS', 'CALLS', 'CONTACTS', 'FAVS'];
   const v = makeList({
     title: DEMO ? 'Buoy (demo)' : 'Buoy', jump: false,
     head: s => { const t = el('div', 'tabs'); TABS.forEach((n, k) => t.appendChild(el('div', k === s.tab ? 'on' : '', n))); return t; },
@@ -1055,7 +1262,7 @@ function mainView() {
         return convs().map(c => {
           const info = convInfo(c.id), l = c.last;
           let sub = info.group && info.group.bc ? 'Broadcast list' : 'No messages yet';
-          if (l) sub = (l.dir === 'out' ? 'You: ' : info.group && l.from ? nameFor(l.from).split(' ')[0] + ': ' : '') + snippet(splitQuote(l.text).body, 60);
+          if (l) sub = (l.dir === 'out' ? 'You: ' : info.group && l.from ? nameFor(l.from).split(' ')[0] + ': ' : '') + (snippet(splitQuote(l.text).body, 60) || (l.mms ? '📷 Picture' : ''));
           sub = (prefs.pinned[c.id] ? '📌 ' : '') + (prefs.muted[c.id] ? '🔇 ' : '') + sub;
           return { title: (info.group && info.group.bc ? '📢 ' : '') + info.title, sub: sub, time: l ? fmtTime(l.t) : '', badge: c.unread, muted: !!prefs.muted[c.id], av: info.title, conv: c.id, group: prefs.pinned[c.id] ? 'Pinned' : (l ? dayGroup(l.t) : 'Today') };
         });
@@ -1064,27 +1271,30 @@ function mainView() {
         const due = dueReminders().map(r => ({ title: reminderTitle(r), sub: '⏰ Call back', time: fmtTime(r.t), av: reminderTitle(r), rem: r, group: 'Call back' }));
         const log = calls.slice().reverse().map(c => {
           const title = c.label || nameFor(c.nums[0]) + (c.nums.length > 1 ? ' +' + (c.nums.length - 1) : '');
-          return { title: title, sub: c.type === 'missed' ? '↙ Missed call' : '↗ ' + (c.nums.length > 1 ? 'Group call' : 'Outgoing'), time: fmtTime(c.t), av: title, call: c, group: dayGroup(c.t) };
+          const kind = CALL_LABEL[c.type] || '↗ ' + (c.nums.length > 1 ? 'Group call' : 'Outgoing');
+          return { title: title, sub: kind + (c.note ? ' · ' + snippet(c.note, 24) : ''), time: fmtTime(c.t), av: title, call: c, group: dayGroup(c.t) };
         });
         return due.concat(log);
       }
-      return Contacts.list.map(c => ({ title: c.name, sub: c.tel + (speedKeyFor(c.tel) ? '  ⚡' + speedKeyFor(c.tel) : ''), av: c.name, contact: c, group: /[A-Za-z]/.test(c.name.charAt(0)) ? c.name.charAt(0).toUpperCase() : '#' }));
+      if (s.tab === 3) return favoriteList().map((f, i) => ({ title: f.name, sub: 'Key ' + (i + 1) + ' · ' + f.tel, av: f.name, fav: f }));
+      return Contacts.list.map(c => ({ title: c.name, sub: c.tel + (speedKeyFor(c.tel) ? '  ⚡' + speedKeyFor(c.tel) : '') + (c.bday && daysUntilBirthday(c.bday) === 0 ? '  🎂' : ''), av: c.name, contact: c, group: /[A-Za-z]/.test(c.name.charAt(0)) ? c.name.charAt(0).toUpperCase() : '#' }));
     },
-    empty: s => ['No chats yet. Press the left key for a new chat.', 'No calls yet. Press the left key to dial.', 'No contacts yet.'][s.tab],
-    sk: s => [['New', 'Open', 'Options'], ['Dial', 'Call', 'Options'], ['New', 'Open', 'Options']][s.tab],
+    empty: s => ['No chats yet. Press the left key for a new chat.', 'No calls yet. Calls placed or seen while Buoy is open show here.', 'No contacts yet.', 'No favorites yet. People you message or call most appear here.'][s.tab],
+    sk: s => {
+      const b = [['New', 'Open', 'Options'], ['Dial', 'Call', 'Options'], ['New', 'Open', 'Options'], ['Dial', 'Open', 'Options']][s.tab].slice();
+      if (SK_ACTIONS[prefs.sk.left]) b[0] = SK_ACTIONS[prefs.sk.left][0];
+      if (SK_ACTIONS[prefs.sk.right]) b[2] = SK_ACTIONS[prefs.sk.right][0];
+      return b;
+    },
     act: (k, it, s) => {
-      if (k === 'ArrowLeft' || k === 'ArrowRight') { s.tab = (s.tab + (k === 'ArrowRight' ? 1 : 2)) % 3; s.i = 0; s.redraw(); return true; }
+      if (k === 'ArrowLeft' || k === 'ArrowRight') { s.tab = (s.tab + (k === 'ArrowRight' ? 1 : 3)) % 4; s.i = 0; s.redraw(); return true; }
       if (k === '*') { go(dialerView('')); return true; }
-      if (k === '#' && s.tab !== 1) { go(searchView(s.tab === 0 ? 'chats' : 'contacts')); return true; }
+      if (k === '#' && (s.tab === 0 || s.tab === 2)) { go(searchView(s.tab === 0 ? 'chats' : 'contacts')); return true; }
+      if (k === 'SoftLeft' && SK_ACTIONS[prefs.sk.left]) { SK_ACTIONS[prefs.sk.left][1](s); return true; }
+      if (k === 'SoftRight') { if (SK_ACTIONS[prefs.sk.right]) SK_ACTIONS[prefs.sk.right][1](s); else optionsMenu(s, it); return true; }
       if (s.tab === 0) {
         if (k === 'SoftLeft') { newChat(); return true; }
         if (k === 'Enter' && it) { openChat(it.conv); return true; }
-        if (k === 'SoftRight') {
-          const o = it ? flagOpts(it.conv, () => { back(); s.redraw(); }) : [];
-          o.push({ t: 'Search', fn: () => go(searchView('chats')) }, { t: 'New group', fn: newGroup }, { t: 'New broadcast list', fn: () => newList(true) },
-            { t: 'New chat', fn: newChat }, { t: 'Group call', fn: groupCallPicker }, { t: 'Settings', fn: () => go(settingsView()) });
-          go(menuView('Options', o)); return true;
-        }
       } else if (s.tab === 1) {
         if (k === 'SoftLeft') { go(dialerView('')); return true; }
         if (k === 'Enter' && it) {
@@ -1093,31 +1303,23 @@ function mainView() {
           if (nums.length > 1) groupCall(nums, label); else dial(nums[0]);
           s.redraw(); return true;
         }
-        if (k === 'SoftRight') {
-          const o = [];
-          if (it && it.call) o.push({ t: 'Remind me to call back', fn: () => remindMenu(it.call.nums, it.call.label) });
-          if (it && it.rem) o.push({ t: 'Dismiss reminder', fn: () => { removeReminder(it.rem); back(); s.redraw(); } });
-          o.push({ t: 'Dial pad', fn: () => go(dialerView('')) }, { t: 'Group call', fn: groupCallPicker }, { t: 'Reminders', fn: () => go(remindersView()) },
-            { t: 'Settings', fn: () => go(settingsView()) }, { t: 'Clear call log', fn: () => { calls = []; saveCalls(); back(); s.redraw(); } });
-          go(menuView('Options', o)); return true;
-        }
-      } else {
+      } else if (s.tab === 2) {
         if (k === 'SoftLeft') { newContact(''); return true; }
         if (k === 'Enter' && it) { contactMenu(it.contact); return true; }
-        if (k === 'SoftRight') {
-          go(menuView('Options', [{ t: 'Search', fn: () => go(searchView('contacts')) }, { t: 'New contact', fn: () => newContact('') }, { t: 'New group', fn: newGroup },
-            { t: 'Reload contacts', fn: () => Contacts.load().then(() => { back(); s.redraw(); toast('Contacts reloaded'); }) }, { t: 'Settings', fn: () => go(settingsView()) }]));
-          return true;
-        }
+      } else {
+        if (k === 'SoftLeft') { go(dialerView('')); return true; }
+        if (k === 'Enter' && it) { favMenu(it.fav); return true; }
       }
       return false;
     }
   });
   v.holdDigits = true;
-  // Short press of a number key: open the Nth chat, or jump through contacts by letter.
+  // Short press of a number key: 0 = Options, Chats = open that chat, Contacts = jump by letter, Favs = message that favorite.
   v.digit = d => {
-    if (v.tab === 0 && d !== '0') openNthChat(+d);
+    if (d === '0') { optionsMenu(v, v.items[v.i]); return; }
+    if (v.tab === 0) openNthChat(+d);
     else if (v.tab === 2) t9jump(v, d);
+    else if (v.tab === 3) { const f = favoriteList()[+d - 1]; if (f) openChat('p:' + key(f.tel), f.tel); else toast('No favorite on ' + d); }
   };
   return v;
 }
@@ -1125,21 +1327,41 @@ function mainView() {
 /* ================= device hooks ================= */
 function initDevice() {
   watchIncoming();
-  try { if (navigator.mozSetMessageHandler) navigator.mozSetMessageHandler('alarm', () => checkReminders()); } catch (e) {}
+  try { if (navigator.mozSetMessageHandler) navigator.mozSetMessageHandler('alarm', () => { checkReminders(); checkScheduled(); }); } catch (e) {}
   const mm = navigator.mozMobileMessage;
   if (!mm) return;
+  applyDeliveryReports();
+  // delivery reports from the phone: ✗ failed, ✓✓ delivered
+  const mark = (e, st) => {
+    const id = e.message && e.message.id, r = msgs.find(x => x.devId === id && x.dir === 'out');
+    if (r) { r.st = st; persist(); refreshView(); }
+  };
+  mm.addEventListener('failed', e => mark(e, 'fail'));
+  mm.addEventListener('deliverysuccess', e => mark(e, 'delivered'));
+  mm.addEventListener('deliveryerror', e => mark(e, 'fail'));
+  mm.addEventListener('readsuccess', e => mark(e, 'read'));
   mm.addEventListener('received', e => {
     const m = e.message;
-    const rec = ingest({ id: 'd' + m.id, num: m.sender, dir: 'in', text: m.body || '', t: m.timestamp });
-    if (rec) { persist(); announce(rec); refreshView(); }
+    if (m.type === 'mms') {
+      if (m.delivery === 'not-downloaded' && mm.retrieveMMS) { try { mm.retrieveMMS(m.id); } catch (err) { /* will stay a notification */ } }
+      const had = msgs.find(x => x.id === 'd' + m.id);
+      if (had) { had.mms = true; persist(); refreshView(); return; }
+      const rec = ingest({ id: 'd' + m.id, num: m.sender, dir: 'in', text: m.subject || '', t: m.timestamp, mms: true, devId: m.id });
+      if (rec) { persist(); announce(rec); refreshView(); }
+      return;
+    }
+    const rec = ingest({ id: 'd' + m.id, num: m.sender, dir: 'in', text: m.body || '', t: m.timestamp, devId: m.id });
+    if (rec) { persist(); announce(rec); refreshView(); autoReplyTo(m.sender, 'text', m.body || ''); }
   });
   const c = mm.getMessages(null, true);
   let n = 0;
   c.onsuccess = function () {
     const m = this.result;
     if (m && n++ < 500) {
-      const inbound = m.delivery === 'received';
-      ingest({ id: 'd' + m.id, num: inbound ? m.sender : m.receiver, dir: inbound ? 'in' : 'out', text: m.body || '', t: m.timestamp, device: true });
+      const inbound = m.delivery === 'received', isMms = m.type === 'mms';
+      const st = m.deliveryStatus === 'success' ? 'delivered' : (m.deliveryStatus === 'error' || m.delivery === 'error') ? 'fail' : 'sent';
+      ingest({ id: 'd' + m.id, num: inbound ? m.sender : (m.receiver || (m.receivers && m.receivers[0])), dir: inbound ? 'in' : 'out', text: isMms ? (m.subject || '') : (m.body || ''),
+        t: m.timestamp, device: true, st: inbound ? undefined : st, devId: m.id, mms: isMms });
       this.continue();
     } else { persist(); refreshView(); }
   };
@@ -1198,7 +1420,11 @@ document.addEventListener('keyup', e => {
 applyTheme();
 MAIN = mainView();
 setView(MAIN);
-Contacts.load().then(() => { initDevice(); refreshView(); });
+Contacts.load().then(() => { initDevice(); refreshView(); announceBirthdays(); autoBackupIfDue(); });
+sweepDisappearing();
+checkScheduled();
+setInterval(checkScheduled, 15000);
+setInterval(sweepDisappearing, 300000);
 if (NO_SMS) setTimeout(() => toast('No SMS permission: texts open in Messages and are not sent from here'), 700);
 setInterval(checkReminders, 30000);
 setInterval(applyTheme, 300000);   // keeps the Auto theme in step with the clock

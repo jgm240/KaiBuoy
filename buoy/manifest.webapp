@@ -2,7 +2,7 @@
   "name": "Buoy",
   "description": "Messenger and dialer: SMS chats, group chats, broadcast lists, calls, reminders, emoji, themes and contacts",
   "launch_path": "/index.html",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "privileged",
   "developer": {
     "name": "Buoy"
@@ -34,6 +34,14 @@
     },
     "systemXHR": {
       "description": "Check GitHub for new versions"
+    },
+    "settings": {
+      "description": "Airplane and silent shortcuts, delivery reports",
+      "access": "readwrite"
+    },
+    "device-storage:sdcard": {
+      "description": "Back up chats to the SD card",
+      "access": "readwrite"
     }
   }
 }

@@ -79,3 +79,9 @@ footer span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ell
 .grid { flex: 1; overflow-y: auto; position: relative; display: flex; flex-wrap: wrap; align-content: flex-start; padding: 2px 4px; }
 .grid div { width: 36px; height: 36px; line-height: 36px; text-align: center; font-size: 22px; border-radius: 6px; margin: 1px; }
 .grid div.f { background: var(--focus); }
+
+/* length counter, pictures, bigger bubbles */
+.counter { display: none; margin: 0 0 4px; font-size: var(--thi); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.b .pic { margin: 2px 0 4px; font-size: var(--thi); }
+.big-bubbles .b { font-size: calc(var(--pri) * 1.3); padding: 10px 12px; margin-top: 7px; margin-bottom: 7px; }
+.big-bubbles .b .ts, .big-bubbles .b .who, .big-bubbles .b .q { font-size: var(--sec); }
