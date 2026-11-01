@@ -1,0 +1,64 @@
+/* Colors come from CSS variables that app.js sets from the Settings screen. */
+:root {
+  --hdr: #075e54; --acc: #25d366; --bg: #fff; --fg: #111; --muted: #667781; --line: #eee;
+  --focus: #e3f6ee; --bar: #f2f2f2; --barfg: #075e54; --sc: #000; --tabfg: rgba(255,255,255,.65);
+  --chat: #ece5dd; --wpimg: none; --wpsize: auto; --out: #dcf8c6; --in: #fff; --input: #fff;
+}
+html { font-size: 14px; }
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--bg); color: var(--fg); font-family: sans-serif; font-size: 1rem; line-height: 1.25; }
+#app { display: flex; flex-direction: column; height: 100%; }
+/* Added when the T9 prediction bar covers the screen instead of resizing it. */
+.kb #app { padding-bottom: 3.5rem; }
+
+#hdr { flex: none; height: 2.2rem; line-height: 2.2rem; padding: 0 .6rem; background: var(--hdr); color: #fff; font-weight: bold; font-size: 1.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+footer { flex: none; height: 2rem; display: flex; align-items: center; padding: 0 .4rem; background: var(--bar); border-top: 1px solid var(--line); font-weight: bold; font-size: .93rem; color: var(--barfg); }
+footer span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#sc { text-align: center; color: var(--sc); text-transform: uppercase; }
+#sr { text-align: right; }
+#toast { position: fixed; left: .8rem; right: .8rem; bottom: 2.6rem; padding: .4rem .6rem; background: rgba(0,0,0,.88); color: #fff; border-radius: .4rem; font-size: .93rem; text-align: center; display: none; z-index: 9; }
+
+.tabs { display: flex; flex: none; height: 1.8rem; background: var(--hdr); }
+.tabs div { flex: 1; text-align: center; line-height: 1.55rem; color: var(--tabfg); font-size: .8rem; font-weight: bold; border-bottom: 3px solid transparent; }
+.tabs div.on { color: #fff; border-bottom-color: var(--acc); }
+
+.list { flex: 1; overflow-y: auto; position: relative; }
+.row { display: flex; align-items: center; min-height: 3.3rem; padding: .2rem .6rem; border-bottom: 1px solid var(--line); }
+.row.f { background: var(--focus); border-left: 4px solid var(--acc); padding-left: calc(.6rem - 4px); }
+.av { width: 2.45rem; height: 2.45rem; border-radius: 50%; color: #fff; font-weight: bold; text-align: center; line-height: 2.45rem; margin-right: .55rem; flex: none; }
+.mid { flex: 1; min-width: 0; }
+.mid b, .mid small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mid small { color: var(--muted); font-size: .86rem; }
+.tm { font-size: .8rem; color: var(--muted); margin-left: .3rem; }
+.tm.u { color: var(--acc); }
+.badge { background: var(--acc); color: #fff; border-radius: 9px; min-width: 1.3rem; padding: 0 .3rem; margin-left: .3rem; text-align: center; font-size: .8rem; font-weight: bold; }
+.badge.m { background: var(--muted); }
+.chk { margin-right: .4rem; font-size: 1.15rem; color: var(--acc); }
+.empty { padding: 1.6rem .8rem; text-align: center; color: var(--muted); }
+.searchbox { flex: none; padding: .35rem; background: var(--bar); }
+.searchbox input { width: 100%; height: 2rem; border: 0; border-radius: 1rem; padding: 0 .8rem; font-size: 1rem; background: var(--input); color: var(--fg); outline: 2px solid var(--acc); }
+
+.msgs { flex: 1; min-height: 0; overflow-y: auto; position: relative; background-color: var(--chat); background-image: var(--wpimg); background-size: var(--wpsize); padding: .3rem .45rem; display: flex; flex-direction: column; }
+.b { max-width: 84%; margin: .15rem 0; padding: .22rem .45rem; border-radius: .45rem; background: var(--in); color: var(--fg); word-wrap: break-word; box-shadow: 0 1px 0 rgba(0,0,0,.15); flex: none; }
+.b.out { background: var(--out); align-self: flex-end; }
+.b.in { align-self: flex-start; }
+.b.sel { outline: 3px solid var(--acc); }
+.b .who { font-size: .8rem; font-weight: bold; }
+.b .q { margin: .1rem 0 .2rem; padding: .1rem .35rem; border-left: 3px solid var(--acc); background: rgba(128,128,128,.18); border-radius: .2rem; font-size: .8rem; color: var(--muted); }
+.b .ts { font-size: .72rem; color: var(--muted); text-align: right; }
+.compose { flex: none; padding: .3rem; background: var(--bar); }
+.compose input { width: 100%; height: 2rem; border: 0; border-radius: 1rem; padding: 0 .8rem; font-size: 1rem; background: var(--input); color: var(--fg); outline: 2px solid var(--acc); }
+.replybar { display: none; margin: 0 .3rem .3rem; padding: .2rem .45rem; border-left: 3px solid var(--acc); background: rgba(128,128,128,.18); border-radius: .2rem; font-size: .8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.note { flex: 1; min-height: 0; padding: .6rem .8rem; overflow-y: auto; line-height: 1.4; }
+.note p { margin: 0 0 .6rem; }
+.big { font-size: 1.9rem; text-align: center; padding: 1.5rem .4rem; word-break: break-all; min-height: 5.5rem; }
+.form { padding: .6rem; }
+.form input { width: 100%; height: 2.3rem; margin-bottom: .6rem; border: 1px solid var(--muted); border-radius: .3rem; padding: 0 .6rem; font-size: 1.05rem; background: var(--input); color: var(--fg); }
+.form input:focus { border-color: var(--acc); outline: 0; box-shadow: 0 0 0 2px var(--acc); }
+
+/* emoji picker: fixed pixel sizes so six columns fit at every text size */
+.grid { flex: 1; overflow-y: auto; position: relative; display: flex; flex-wrap: wrap; align-content: flex-start; padding: 2px 4px; }
+.grid div { width: 36px; height: 36px; line-height: 36px; text-align: center; font-size: 22px; border-radius: 6px; margin: 1px; }
+.grid div.f { background: var(--acc); }

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 112">
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f5f8a"/>
+      <stop offset="1" stop-color="#082a46"/>
+    </linearGradient>
+    <clipPath id="disc"><circle cx="56" cy="56" r="55"/></clipPath>
+  </defs>
+  <circle cx="56" cy="56" r="55" fill="url(#sea)"/>
+  <g clip-path="url(#disc)">
+    <!-- rising bubbles -->
+    <circle cx="88" cy="24" r="3.4" fill="#fff" opacity=".55"/>
+    <circle cx="95" cy="35" r="2" fill="#fff" opacity=".4"/>
+    <!-- back wave, behind the buoy -->
+    <path d="M-14 55q14 -7 28 0t28 0t28 0t28 0t28 0V112H-14z" fill="#2aa3d6" opacity=".55"/>
+    <!-- lifebuoy -->
+    <g transform="rotate(-12 56 38)">
+      <circle cx="56" cy="38" r="17.5" fill="none" stroke="#fff" stroke-width="13"/>
+      <circle cx="56" cy="38" r="17.5" fill="none" stroke="#ff5a3c" stroke-width="13" stroke-dasharray="13.74 13.74" stroke-dashoffset="-6.87"/>
+      <circle cx="56" cy="38" r="24" fill="none" stroke="#082a46" stroke-width="1" opacity=".35"/>
+      <circle cx="56" cy="38" r="11" fill="none" stroke="#082a46" stroke-width="1" opacity=".35"/>
+    </g>
+    <!-- chat dots seen through the ring -->
+    <circle cx="50" cy="38" r="2.1" fill="#fff"/>
+    <circle cx="56" cy="38" r="2.1" fill="#fff"/>
+    <circle cx="62" cy="38" r="2.1" fill="#fff"/>
+    <!-- waves -->
+    <path d="M-28 59q14 -7 28 0t28 0t28 0t28 0t28 0t28 0V112H-28z" fill="#1678ad"/>
+  </g>
+  <text x="56" y="94" text-anchor="middle" font-family="Futura, Avenir Next, sans-serif" font-weight="700" font-size="21" fill="#fff" textLength="46" lengthAdjust="spacingAndGlyphs">buoy</text>
+</svg>

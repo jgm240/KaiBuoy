@@ -1,0 +1,36 @@
+{
+  "name": "Buoy",
+  "description": "Messenger and dialer: SMS chats, group chats, broadcast lists, calls, reminders, emoji, themes and contacts",
+  "launch_path": "/index.html",
+  "version": "0.3.1",
+  "type": "privileged",
+  "developer": {
+    "name": "Buoy"
+  },
+  "icons": {
+    "56": "/icon-56.png",
+    "112": "/icon-112.png"
+  },
+  "default_locale": "en",
+  "permissions": {
+    "contacts": {
+      "description": "Show and add your contacts",
+      "access": "readwrite"
+    },
+    "sms": {
+      "description": "Send and read text messages"
+    },
+    "telephony": {
+      "description": "Start group calls"
+    },
+    "alarms": {
+      "description": "Remind you to call people back"
+    },
+    "desktop-notification": {
+      "description": "Show call-back reminders"
+    },
+    "mobileconnection": {
+      "description": "See which SIM slot has a card"
+    }
+  }
+}

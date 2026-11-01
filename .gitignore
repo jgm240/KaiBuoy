@@ -1,0 +1,5 @@
+.DS_Store
+*.zip
+# earlier Floatbubble logo files
+design/icon.svg
+design/icon-*.png
